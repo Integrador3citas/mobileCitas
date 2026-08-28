@@ -15,10 +15,10 @@ class MeetingService {
     return fallback;
   }
 
-  /// GET /eventos
+  /// GET /api/eventos
   Future<List<Meeting>> getMeetings() async {
     try {
-      final response = await _api.dio.get("/eventos");
+      final response = await _api.dio.get("/api/eventos");
       final data = response.data;
 
       final List<dynamic> eventos;
@@ -36,7 +36,28 @@ class MeetingService {
     }
   }
 
-  /// POST /eventos -> { mensaje, evento }
+  /// GET /api/eventos/mis-eventos
+  Future<List<Meeting>> getMisEventos() async {
+    try {
+      final response = await _api.dio.get("/api/eventos/mis-eventos");
+      final data = response.data;
+
+      final List<dynamic> eventos;
+      if (data is List) {
+        eventos = data;
+      } else if (data is Map && data["eventos"] is List) {
+        eventos = data["eventos"];
+      } else {
+        eventos = [];
+      }
+
+      return eventos.map((json) => Meeting.fromJson(json)).toList();
+    } on DioException catch (e) {
+      throw Exception(_extractMensaje(e, "Error al obtener mis eventos"));
+    }
+  }
+
+  /// POST /api/eventos -> { mensaje, evento }
   Future<Meeting> createMeeting({
     required String title,
     required DateTime date,
@@ -57,7 +78,7 @@ class MeetingService {
       );
 
       final response = await _api.dio.post(
-        "/eventos",
+        "/api/eventos",
         data: meeting.toJson(),
       );
 
@@ -72,7 +93,7 @@ class MeetingService {
     }
   }
 
-  /// PUT /eventos/:id -> { mensaje, evento }
+  /// PUT /api/eventos/:id -> { mensaje, evento }
   Future<Meeting> updateMeeting({
     required int id,
     required String title,
@@ -94,7 +115,7 @@ class MeetingService {
       );
 
       final response = await _api.dio.put(
-        "/eventos/$id",
+        "/api/eventos/$id",
         data: meeting.toJson(),
       );
 
@@ -109,10 +130,10 @@ class MeetingService {
     }
   }
 
-  /// DELETE /eventos/:id
+  /// DELETE /api/eventos/:id
   Future<void> deleteMeeting(int id) async {
     try {
-      await _api.dio.delete("/eventos/$id");
+      await _api.dio.delete("/api/eventos/$id");
     } on DioException catch (e) {
       throw Exception(_extractMensaje(e, "Error al eliminar la reunión"));
     }
@@ -124,7 +145,7 @@ class MeetingService {
   }) async {
     try {
       final response = await _api.dio.post(
-        "/eventos/$eventoId/participantes",
+        "/api/eventos/$eventoId/participantes",
         data: {"usuarioId": usuarioId},
       );
 
@@ -134,10 +155,10 @@ class MeetingService {
     }
   }
 
-  /// GET /eventos/:id/participantes -> Participantes de un evento,
+  /// GET /api/eventos/:id/participantes -> Participantes de un evento,
   Future<List<Participant>> listarParticipantes(int eventoId) async {
     try {
-      final response = await _api.dio.get("/eventos/$eventoId/participantes");
+      final response = await _api.dio.get("/api/eventos/$eventoId/participantes");
       final data = response.data;
 
       final List<dynamic> raw =

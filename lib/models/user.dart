@@ -3,6 +3,7 @@ class User {
   final String name;
   final String iden;
   final String email;
+  final String? password;
   final String role;
 
   User({
@@ -10,6 +11,7 @@ class User {
     required this.name,
     required this.iden,
     required this.email,
+    this.password,
     required this.role,
   });
 
@@ -19,7 +21,19 @@ class User {
       name: (json["nombre"] ?? '').toString(),
       iden: (json["cedula"] ?? '').toString(),
       email: (json["correo"] ?? '').toString(),
+      password: json["password"]?.toString(),
       role: (json["rol"] ?? '').toString(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      "id": id,
+      "nombre": name,
+      "cedula": iden,
+      "correo": email,
+      if (password != null) "password": password,
+      "rol": role,
+    };
   }
 }

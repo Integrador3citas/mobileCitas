@@ -26,29 +26,47 @@ AttendanceStatus _statusFromString(String? value) {
 
 class Attendance {
   final int id;
-  final int participantId; // participanteId
-  final DateTime checkInTime; // horaIngreso
-  final AttendanceMethod method; // metodo
-  final AttendanceStatus status; // estado
+  final int usuarioId;
+  final int eventoId;
+  final String estado;
+  final DateTime horaRegistro;
+  final String? nombre;
+  final String? cedula;
 
   const Attendance({
     required this.id,
-    required this.participantId,
-    required this.checkInTime,
-    required this.method,
-    required this.status,
+    required this.usuarioId,
+    required this.eventoId,
+    required this.estado,
+    required this.horaRegistro,
+    this.nombre,
+    this.cedula,
   });
 
   factory Attendance.fromJson(Map<String, dynamic> json) {
     return Attendance(
       id: int.tryParse(json['id'].toString()) ?? 0,
-      participantId: int.tryParse(json['participanteId'].toString()) ?? 0,
-      checkInTime:
-          DateTime.tryParse(json['horaIngreso']?.toString() ?? '') ??
+      usuarioId: int.tryParse(json['usuarioId'].toString()) ?? 0,
+      eventoId: int.tryParse(json['eventoId'].toString()) ?? 0,
+      estado: (json['estado'] ?? '').toString(),
+      horaRegistro:
+          DateTime.tryParse(json['horaRegistro']?.toString() ?? '') ??
               DateTime.now(),
-      method: _methodFromString(json['metodo']?.toString()),
-      status: _statusFromString(json['estado']?.toString()),
+      nombre: json['nombre']?.toString(),
+      cedula: json['cedula']?.toString(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'usuarioId': usuarioId,
+      'eventoId': eventoId,
+      'estado': estado,
+      'horaRegistro': horaRegistro.toIso8601String(),
+      if (nombre != null) 'nombre': nombre,
+      if (cedula != null) 'cedula': cedula,
+    };
   }
 }
 

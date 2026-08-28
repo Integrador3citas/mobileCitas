@@ -5,6 +5,8 @@ import '../../core/theme/app_spacing.dart';
 import '../../models/meeting.dart';
 import '/core/services/meeting_service.dart';
 import '../../widgets/meeting/meeting_card.dart';
+import '../../widgets/common/app_button.dart';
+import '../../core/routes/app_routes.dart';
 
 class HomeContent extends StatefulWidget {
   const HomeContent({super.key});
@@ -34,12 +36,20 @@ class _HomeContentState extends State<HomeContent> {
 
     try {
       final meetings = await _meetingService.getMeetings();
+      
+      final futureMeetings = meetings.where((m) {
+        return m.status != MeetingStatus.finished;
+      }).toList();
+      
+      futureMeetings.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+
+      if (!mounted) return;
       setState(() {
-        // El backend ya ordena por fecha ASC; mostramos las próximas 2.
-        _meetings = meetings.take(2).toList();
+        _meetings = futureMeetings.take(2).toList();
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString().replaceFirst("Exception: ", "");
         _isLoading = false;
@@ -65,6 +75,22 @@ class _HomeContentState extends State<HomeContent> {
             style: AppTextStyles.body,
           ),
 
+          const SizedBox(height: AppSpacing.md),
+
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 250,
+              child: AppButton(
+                text: "Escanear Asistencia (QR)",
+                icon: Icons.qr_code_scanner,
+                onPressed: () {
+                  Navigator.pushNamed(context, AppRoutes.attendanceScanner);
+                },
+              ),
+            ),
+          ),
+
           const SizedBox(height: AppSpacing.xl),
 
           Text(
@@ -88,7 +114,7 @@ class _HomeContentState extends State<HomeContent> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
               child: Text(
-                "No hay reuniones próximas",
+                "No hay reuniones programadas próximamente",
                 style: AppTextStyles.body,
               ),
             )

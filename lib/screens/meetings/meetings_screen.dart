@@ -23,8 +23,12 @@ class _MeetingsScreenState extends State<MeetingsScreen> {
   final MeetingService _meetingService = MeetingService();
   final TextEditingController _searchController = TextEditingController();
 
-  List<Meeting> _meetings = [];
-  List<Meeting> _filteredMeetings = [];
+  List<Meeting> _allMeetings = [];
+  List<Meeting> _filteredAllMeetings = [];
+  
+  List<Meeting> _myMeetings = [];
+  List<Meeting> _filteredMyMeetings = [];
+  
   bool _isLoading = true;
   String? _errorMessage;
   bool _puedeCrear = false;
@@ -32,13 +36,13 @@ class _MeetingsScreenState extends State<MeetingsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadMeetings();
     _cargarPermiso();
+    _loadMeetings();
     _searchController.addListener(_applyFilter);
   }
 
-  Future<void> _cargarPermiso() async {
-    final puede = await SessionManager.puedeGestionarEventos();
+  void _cargarPermiso() {
+    final puede = SessionManager.puedeGestionarEventos;
     if (mounted) setState(() => _puedeCrear = puede);
   }
 
@@ -49,6 +53,21 @@ class _MeetingsScreenState extends State<MeetingsScreen> {
     super.dispose();
   }
 
+  int _sortMeetings(Meeting a, Meeting b) {
+    final weightA = a.status == MeetingStatus.finished ? 1 : 0;
+    final weightB = b.status == MeetingStatus.finished ? 1 : 0;
+    
+    if (weightA != weightB) {
+      return weightA.compareTo(weightB);
+    }
+    
+    if (weightA == 0) {
+      return a.dateTime.compareTo(b.dateTime);
+    } else {
+      return b.dateTime.compareTo(a.dateTime);
+    }
+  }
+
   Future<void> _loadMeetings() async {
     setState(() {
       _isLoading = true;
@@ -56,13 +75,27 @@ class _MeetingsScreenState extends State<MeetingsScreen> {
     });
 
     try {
-      final meetings = await _meetingService.getMeetings();
+      List<Meeting> all = [];
+      List<Meeting> my = [];
+
+      if (_puedeCrear) {
+        all = await _meetingService.getMeetings();
+        all.sort(_sortMeetings);
+      }
+      
+      my = await _meetingService.getMisEventos();
+      my.sort(_sortMeetings);
+
+      if (!mounted) return;
       setState(() {
-        _meetings = meetings;
-        _filteredMeetings = meetings;
+        _allMeetings = all;
+        _filteredAllMeetings = all;
+        _myMeetings = my;
+        _filteredMyMeetings = my;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString().replaceFirst("Exception: ", "");
         _isLoading = false;
@@ -74,12 +107,20 @@ class _MeetingsScreenState extends State<MeetingsScreen> {
     final query = _searchController.text.trim().toLowerCase();
 
     setState(() {
-      _filteredMeetings = query.isEmpty
-          ? _meetings
-          : _meetings.where((m) {
-              return m.title.toLowerCase().contains(query) ||
-                  m.location.toLowerCase().contains(query);
-            }).toList();
+      if (query.isEmpty) {
+        _filteredAllMeetings = _allMeetings;
+        _filteredMyMeetings = _myMeetings;
+      } else {
+        _filteredAllMeetings = _allMeetings.where((m) {
+          return m.title.toLowerCase().contains(query) ||
+                 m.location.toLowerCase().contains(query);
+        }).toList();
+        
+        _filteredMyMeetings = _myMeetings.where((m) {
+          return m.title.toLowerCase().contains(query) ||
+                 m.location.toLowerCase().contains(query);
+        }).toList();
+      }
     });
   }
 
@@ -98,41 +139,57 @@ class _MeetingsScreenState extends State<MeetingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              "Reuniones",
-              style: AppTextStyles.pageTitle,
-            ),
-            if (_puedeCrear)
-              SizedBox(
-                width: 180,
-                child: AppButton(
-                  text: "Crear reunión",
-                  onPressed: _goToCreateMeeting,
-                ),
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Reuniones",
+                style: AppTextStyles.pageTitle,
               ),
+              if (_puedeCrear)
+                SizedBox(
+                  width: 180,
+                  child: AppButton(
+                    text: "Crear reunión",
+                    onPressed: _goToCreateMeeting,
+                  ),
+                ),
+            ],
+          ),
+
+          const SizedBox(height: AppSpacing.lg),
+
+          AppTextField(
+            controller: _searchController,
+            label: "Buscar reunión",
+            prefixIcon: Icons.search,
+          ),
+
+          if (_puedeCrear) ...[
+            const SizedBox(height: AppSpacing.md),
+            const TabBar(
+              labelColor: Colors.blue,
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: Colors.blue,
+              tabs: [
+                Tab(text: "Todas"),
+                Tab(text: "Mis reuniones"),
+              ],
+            ),
           ],
-        ),
 
-        const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.md),
 
-        AppTextField(
-          controller: _searchController,
-          label: "Buscar reunión",
-          prefixIcon: Icons.search,
-        ),
-
-        const SizedBox(height: AppSpacing.lg),
-
-        Expanded(
-          child: _buildBody(),
-        ),
-      ],
+          Expanded(
+            child: _buildBody(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -144,9 +201,11 @@ class _MeetingsScreenState extends State<MeetingsScreen> {
     if (_errorMessage != null) {
       return Center(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_errorMessage!, style: AppTextStyles.body),
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: AppSpacing.md),
+            Text(_errorMessage!, style: AppTextStyles.body, textAlign: TextAlign.center),
             const SizedBox(height: AppSpacing.md),
             AppButton(
               text: "Reintentar",
@@ -157,11 +216,42 @@ class _MeetingsScreenState extends State<MeetingsScreen> {
       );
     }
 
-    if (_filteredMeetings.isEmpty) {
-      return Center(
-        child: Text(
-          "No hay reuniones para mostrar",
-          style: AppTextStyles.body,
+    if (_puedeCrear) {
+      return TabBarView(
+        children: [
+          _buildMeetingList(_filteredAllMeetings),
+          _buildMeetingList(_filteredMyMeetings),
+        ],
+      );
+    } else {
+      return _buildMeetingList(_filteredMyMeetings);
+    }
+  }
+
+  Widget _buildMeetingList(List<Meeting> meetings) {
+    if (meetings.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _loadMeetings,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.5,
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.event_busy, size: 64, color: Colors.grey),
+                    SizedBox(height: AppSpacing.md),
+                    Text(
+                      "No hay reuniones para mostrar",
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -169,11 +259,14 @@ class _MeetingsScreenState extends State<MeetingsScreen> {
     return RefreshIndicator(
       onRefresh: _loadMeetings,
       child: ListView.builder(
-        itemCount: _filteredMeetings.length,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: meetings.length,
         itemBuilder: (context, index) {
-          final meeting = _filteredMeetings[index];
-
-          return MeetingCard(meeting: meeting);
+          final meeting = meetings[index];
+          return MeetingCard(
+            meeting: meeting, 
+            onChanged: _loadMeetings,
+          );
         },
       ),
     );

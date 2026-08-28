@@ -12,7 +12,7 @@ class AuthService {
   }) async {
     try {
       final response = await _api.dio.post(
-        "/auth/login",
+        "/api/auth/login",
         data: {
           "correo": correo,
           "password": password,

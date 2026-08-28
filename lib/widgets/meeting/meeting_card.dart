@@ -3,16 +3,26 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/meeting.dart';
+import '../../core/services/meeting_service.dart';
+import '../../core/storage/session_manager.dart';
 import 'meeting_details_dialog.dart';
+import '../../screens/meetings/edit_meeting_screen.dart';
 
-class MeetingCard extends StatelessWidget {
+class MeetingCard extends StatefulWidget {
   final Meeting meeting;
+  final VoidCallback? onChanged;
 
   const MeetingCard({
     super.key,
     required this.meeting,
+    this.onChanged,
   });
 
+  @override
+  State<MeetingCard> createState() => _MeetingCardState();
+}
+
+class _MeetingCardState extends State<MeetingCard> {
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -26,7 +36,7 @@ class MeetingCard extends StatelessWidget {
             context: context,
             builder: (context) {
               return MeetingDetailsDialog(
-                meeting: meeting,
+                meeting: widget.meeting,
               );
             },
           );
@@ -39,9 +49,30 @@ class MeetingCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                meeting.title,
-                style: AppTextStyles.heading,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.meeting.title,
+                      style: AppTextStyles.heading,
+                    ),
+                  ),
+                  if (SessionManager.puedeGestionarEventos)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                          onPressed: () => _editarReunion(context),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: () => _confirmarEliminacion(context),
+                        ),
+                      ],
+                    ),
+                ],
               ),
 
               const SizedBox(
@@ -60,7 +91,7 @@ class MeetingCard extends StatelessWidget {
                   ),
 
                   Text(
-                    _formatDate(meeting.dateTime),
+                    _formatDate(widget.meeting.dateTime),
                     style: AppTextStyles.body,
                   ),
                 ],
@@ -83,7 +114,7 @@ class MeetingCard extends StatelessWidget {
 
                   Expanded(
                     child: Text(
-                      meeting.location,
+                      widget.meeting.location,
                       style: AppTextStyles.body,
                     ),
                   ),
@@ -106,13 +137,13 @@ class MeetingCard extends StatelessWidget {
                   ),
 
                   Text(
-                    "Tolerancia: ${meeting.toleranceMinutes} min",
+                    "Tolerancia: ${widget.meeting.toleranceMinutes} min",
                     style: AppTextStyles.body,
                   ),
                 ],
               ),
 
-              if (meeting.participants > 0) ...[
+              if (widget.meeting.participants > 0) ...[
                 const SizedBox(
                   height: AppSpacing.sm,
                 ),
@@ -129,7 +160,7 @@ class MeetingCard extends StatelessWidget {
                     ),
 
                     Text(
-                      "${meeting.participants} participantes",
+                      "${widget.meeting.participants} participantes",
                       style: AppTextStyles.body,
                     ),
                   ],
@@ -150,5 +181,56 @@ class MeetingCard extends StatelessWidget {
     final minute = date.minute.toString().padLeft(2, '0');
 
     return "$day/$month/${date.year}   $hour:$minute";
+  }
+
+  Future<void> _editarReunion(BuildContext context) async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditMeetingScreen(meeting: widget.meeting),
+      ),
+    );
+
+    if (result == true) {
+      widget.onChanged?.call();
+    }
+  }
+
+  Future<void> _confirmarEliminacion(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
+        title: const Text("Eliminar reunión"),
+        content: Text("¿Seguro que desea eliminar '${widget.meeting.title}'? Esta acción no se puede deshacer."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancelar"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text("Eliminar"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      try {
+        await MeetingService().deleteMeeting(widget.meeting.id);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Reunión eliminada exitosamente")),
+        );
+        widget.onChanged?.call();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }

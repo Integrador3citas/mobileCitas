@@ -74,16 +74,20 @@ class _MeetingParticipantsScreenState
 
       try {
         final usuarios = await _userService.listarUsuarios();
+        if (!mounted) return;
         setState(() => _usuarios = usuarios);
       } catch (e) {
+        if (!mounted) return;
         setState(() {
           _sinPermiso = true;
           _errorMessage = e.toString().replaceFirst("Exception: ", "");
         });
       }
 
+      if (!mounted) return;
       setState(() => _isLoading = false);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString().replaceFirst("Exception: ", "");
         _isLoading = false;
@@ -138,6 +142,7 @@ class _MeetingParticipantsScreenState
     _seleccionados.clear();
     await _cargarDatos();
 
+    if (!mounted) return;
     setState(() {
       _isSaving = false;
       if (errores.isNotEmpty) _errorMessage = errores.join("\n");

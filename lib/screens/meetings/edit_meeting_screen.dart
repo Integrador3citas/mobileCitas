@@ -9,29 +9,41 @@ import '/core/services/meeting_service.dart';
 import '../../widgets/common/app_button.dart';
 import '../../widgets/common/app_textfield.dart';
 
-import 'meeting_participants_screen.dart';
+class EditMeetingScreen extends StatefulWidget {
+  final Meeting meeting;
 
-class CreateMeetingScreen extends StatefulWidget {
-  const CreateMeetingScreen({super.key});
+  const EditMeetingScreen({super.key, required this.meeting});
 
   @override
-  State<CreateMeetingScreen> createState() => _CreateMeetingScreenState();
+  State<EditMeetingScreen> createState() => _EditMeetingScreenState();
 }
 
-class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
+class _EditMeetingScreenState extends State<EditMeetingScreen> {
   final MeetingService _meetingService = MeetingService();
   final _formKey = GlobalKey<FormState>();
 
-  final _nombreController = TextEditingController();
-  final _lugarController = TextEditingController();
-  final _toleranciaController = TextEditingController(text: "20");
+  late TextEditingController _nombreController;
+  late TextEditingController _lugarController;
+  late TextEditingController _toleranciaController;
 
   DateTime? _fechaSeleccionada;
   TimeOfDay? _horaSeleccionada;
-  TipoReunion _tipoReunion = TipoReunion.soloMiembros;
+  late TipoReunion _tipoReunion;
 
   bool _isSaving = false;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _nombreController = TextEditingController(text: widget.meeting.title);
+    _lugarController = TextEditingController(text: widget.meeting.location);
+    _toleranciaController = TextEditingController(text: widget.meeting.toleranceMinutes.toString());
+    
+    _fechaSeleccionada = widget.meeting.dateTime;
+    _horaSeleccionada = TimeOfDay.fromDateTime(widget.meeting.dateTime);
+    _tipoReunion = widget.meeting.tipoReunion;
+  }
 
   @override
   void dispose() {
@@ -60,7 +72,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _fechaSeleccionada ?? now,
-      firstDate: now.subtract(const Duration(days: 1)),
+      firstDate: now.subtract(const Duration(days: 365)),
       lastDate: DateTime(now.year + 2),
     );
 
@@ -80,7 +92,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
     }
   }
 
-  Future<void> _crearReunion() async {
+  Future<void> _editarReunion() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -88,22 +100,6 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
     if (_fechaSeleccionada == null || _horaSeleccionada == null) {
       setState(() {
         _errorMessage = "Por favor, seleccione fecha y hora";
-      });
-      return;
-    }
-
-    // Pre-validación: La reunión debe crearse con al menos 30 minutos de anticipación.
-    final meetingDateTime = DateTime(
-      _fechaSeleccionada!.year,
-      _fechaSeleccionada!.month,
-      _fechaSeleccionada!.day,
-      _horaSeleccionada!.hour,
-      _horaSeleccionada!.minute,
-    );
-
-    if (meetingDateTime.difference(DateTime.now()).inMinutes < 30) {
-      setState(() {
-        _errorMessage = "La reunión debe crearse con al menos 30 minutos de anticipación.";
       });
       return;
     }
@@ -121,7 +117,8 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
       final lugar = _lugarController.text.trim();
       final tolerancia = int.tryParse(_toleranciaController.text.trim()) ?? 20;
 
-      final creada = await _meetingService.createMeeting(
+      await _meetingService.updateMeeting(
+        id: widget.meeting.id,
         title: nombre,
         date: _fechaSeleccionada!,
         time: horaStr,
@@ -132,19 +129,11 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
 
       if (!mounted) return;
 
-      // Va directo a asociar participantes a la reunión recién creada.
-      // Pasamos result: true para que la pantalla anterior (MeetingsScreen)
-      // reciba 'true' y recargue la lista de reuniones en segundo plano.
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => MeetingParticipantsScreen(
-            meetingId: creada.id,
-            meetingTitle: creada.title,
-          ),
-        ),
-        result: true,
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Reunión actualizada exitosamente")),
       );
+
+      Navigator.pop(context, true);
     } catch (e) {
       setState(() {
         _errorMessage = e.toString().replaceFirst("Exception: ", "");
@@ -160,7 +149,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
       child: Scaffold(
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
-          title: const Text("Crear reunión"),
+          title: const Text("Editar reunión"),
         ),
         body: Align(
           alignment: Alignment.topCenter,
@@ -175,14 +164,14 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Crear reunión",
+                    "Editar reunión",
                     style: AppTextStyles.pageTitle,
                   ),
 
                   const SizedBox(height: AppSpacing.sm),
 
                   Text(
-                    "Complete la información de la reunión.",
+                    "Modifique la información de la reunión.",
                     style: AppTextStyles.body,
                   ),
 
@@ -289,9 +278,9 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: AppButton(
-                          text: "Crear reunión",
+                          text: "Guardar",
                           isLoading: _isSaving,
-                          onPressed: _crearReunion,
+                          onPressed: _editarReunion,
                         ),
                       ),
                     ],

@@ -37,16 +37,20 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       );
 
-      await SessionManager.saveToken(login.token);
-      await SessionManager.saveUsuario({
-        "id": login.usuario.id,
-        "nombre": login.usuario.name,
-        "correo": login.usuario.email,
-        "rol": login.usuario.role,
-      });
+      // Guardamos token y usuario usando el nuevo método unificado
+      await SessionManager.saveSession(
+        token: login.token,
+        usuario: {
+          "id": login.usuario.id,
+          "nombre": login.usuario.name,
+          "correo": login.usuario.email,
+          "rol": login.usuario.role,
+        },
+      );
 
       if (!mounted) return;
 
+      // Navegación segura
       Navigator.pushReplacementNamed(
         context,
         AppRoutes.home,
@@ -56,7 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString()),
+          content: Text(e.toString().replaceFirst("Exception: ", "")),
         ),
       );
     }

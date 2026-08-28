@@ -5,6 +5,7 @@ import '../../core/theme/app_text_styles.dart';
 
 import '../../models/meeting.dart';
 import '/models/participant.dart';
+import '/models/attendance.dart';
 import '/core/services/meeting_service.dart';
 import '/core/services/attendance_service.dart';
 
@@ -59,13 +60,48 @@ class _AttendanceCheckinScreenState extends State<AttendanceCheckinScreen> {
     });
 
     try {
-      final participantes =
-          await _meetingService.listarParticipantes(widget.meeting.id);
+      final results = await Future.wait([
+        _meetingService.listarParticipantes(widget.meeting.id),
+        _attendanceService.report(widget.meeting.id).catchError((_) => null),
+      ]);
+      
+      final participantes = results[0] as List<Participant>;
+      final reporte = results[1] as AttendanceReport?;
+
+      if (!mounted) return;
       setState(() {
         _participantes = participantes;
         _isLoading = false;
+
+        _resultadoPorUsuario.clear();
+
+        // 1. Cruce con el reporte (fuente de la verdad principal)
+        if (reporte != null) {
+          for (var item in reporte.detail) {
+            if (item.status == AttendanceStatus.present || item.status == AttendanceStatus.late) {
+               final matches = _participantes.where((p) => p.user?.iden == item.identification).toList();
+               if (matches.isNotEmpty) {
+                 final estadoStr = item.status == AttendanceStatus.late ? "tardio" : "presente";
+                 _resultadoPorUsuario[matches.first.userId] = "Registrado: $estadoStr";
+               }
+            }
+          }
+        }
+
+        // 2. Mapeo fallback por si el reporte falló
+        for (var p in participantes) {
+          if (!_resultadoPorUsuario.containsKey(p.userId)) {
+            if (p.attendanceStatus != null && p.attendanceStatus!.isNotEmpty) {
+              _resultadoPorUsuario[p.userId] = "Registrado: ${p.attendanceStatus}";
+            } else if (p.attendanceStatus?.toLowerCase() == 'presente' || 
+                       p.attendanceStatus?.toLowerCase() == 'tardio') {
+              _resultadoPorUsuario[p.userId] = "Registrado: ${p.attendanceStatus}";
+            }
+          }
+        }
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString().replaceFirst("Exception: ", "");
         _isLoading = false;
@@ -81,14 +117,26 @@ class _AttendanceCheckinScreenState extends State<AttendanceCheckinScreen> {
         eventId: widget.meeting.id,
         userId: p.userId,
       );
+      if (!mounted) return;
       setState(() {
         _resultadoPorUsuario[p.userId] =
-            "Registrado: ${attendance.status.name}";
+            "Registrado: ${attendance.estado}";
       });
     } catch (e) {
+      if (!mounted) return;
+      final errorMsg = e.toString().replaceFirst("Exception: ", "");
       setState(() {
-        _resultadoPorUsuario[p.userId] =
-            e.toString().replaceFirst("Exception: ", "");
+        final errorLower = errorMsg.toLowerCase();
+        if (errorLower.contains("ya tiene asistencia") ||
+            errorLower.contains("ya está") ||
+            errorLower.contains("ya existe") ||
+            errorLower.contains("registrada")) {
+          // El backend rechazó porque ya está registrado.
+          // Actualizamos el estado visual localmente al badge verde.
+          _resultadoPorUsuario[p.userId] = "Registrado: presente";
+        } else {
+          _resultadoPorUsuario[p.userId] = errorMsg;
+        }
       });
     }
   }
@@ -120,7 +168,7 @@ class _AttendanceCheckinScreenState extends State<AttendanceCheckinScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("$nombre registrado como ${attendance.status.name}"),
+          content: Text("$nombre registrado como ${attendance.estado}"),
         ),
       );
 
@@ -181,25 +229,69 @@ class _AttendanceCheckinScreenState extends State<AttendanceCheckinScreen> {
                   else
                     ..._participantes.map((p) {
                       final resultado = _resultadoPorUsuario[p.userId];
+                      final isRegistrado = resultado != null && resultado.startsWith("Registrado");
+                      
+                      Widget trailingWidget;
+                      if (isRegistrado) {
+                        final estadoLower = resultado.toLowerCase();
+                        IconData iconData = Icons.check_circle;
+                        Color badgeColor = Colors.green;
+                        
+                        if (estadoLower.contains('tardio') || estadoLower.contains('tardío')) {
+                          iconData = Icons.schedule;
+                          badgeColor = Colors.orange;
+                        } else if (estadoLower.contains('ausente')) {
+                          iconData = Icons.cancel;
+                          badgeColor = Colors.red;
+                        }
+
+                        trailingWidget = Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: badgeColor.withAlpha(25), // 0.1 opacity
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: badgeColor.withAlpha(128)), // 0.5 opacity
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(iconData, size: 16, color: badgeColor),
+                              const SizedBox(width: 4),
+                              Text(
+                                estadoLower.contains('tardio') 
+                                    ? "Tardío" 
+                                    : estadoLower.contains('ausente') 
+                                        ? "Ausente" 
+                                        : "Presente",
+                                style: AppTextStyles.body.copyWith(
+                                  color: badgeColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      } else {
+                        trailingWidget = TextButton(
+                          onPressed: () => _marcarAsistenciaMiembro(p),
+                          child: const Text("Marcar"),
+                        );
+                      }
+
                       return Card(
                         margin: const EdgeInsets.only(bottom: AppSpacing.sm),
                         child: ListTile(
                           title: Text(p.user?.name ?? "Usuario ${p.userId}"),
                           subtitle: Text(
-                            resultado ??
-                                "${p.user?.iden ?? ''} · ${p.user?.role ?? ''}",
-                            style: resultado != null
-                                ? AppTextStyles.body.copyWith(
-                                    color: resultado.startsWith("Registrado")
-                                        ? Colors.green
-                                        : Colors.red,
-                                  )
+                            isRegistrado 
+                                ? "${p.user?.iden ?? ''} · ${p.user?.role ?? ''}"
+                                : resultado ?? "${p.user?.iden ?? ''} · ${p.user?.role ?? ''}",
+                            style: (resultado != null && !isRegistrado)
+                                ? AppTextStyles.body.copyWith(color: Colors.red)
                                 : null,
                           ),
-                          trailing: TextButton(
-                            onPressed: () => _marcarAsistenciaMiembro(p),
-                            child: const Text("Marcar"),
-                          ),
+                          trailing: trailingWidget,
                         ),
                       );
                     }),

@@ -1,14 +1,16 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '/core/network/api_client.dart';
+import '/core/storage/session_manager.dart';
 import '/models/attendance.dart';
 
 
 class AttendanceService {
   final ApiClient _api = ApiClient();
 
-  static const String _base = "/asistencia";
+  static const String _base = "/api/asistencia";
 
   String _extractMessage(DioException e, String fallback) {
     final data = e.response?.data;
@@ -43,18 +45,29 @@ class AttendanceService {
     required String name,
     required String identification,
   }) async {
+    final String endpoint = "$_base/check-in-invitado";
+    final data = {
+      "eventoId": eventId,
+      "nombre": name,
+      "cedula": identification,
+    };
+
     try {
+      debugPrint("[AttendanceService] POST $endpoint");
+      debugPrint("[AttendanceService] Body: $data");
+
       final response = await _api.dio.post(
-        "$_base/check-in-invitado",
-        data: {
-          "eventoId": eventId,
-          "nombre": name,
-          "cedula": identification,
-        },
+        endpoint,
+        data: data,
       );
+
+      debugPrint("[AttendanceService] SUCCESS: ${response.statusCode}");
+      debugPrint("[AttendanceService] Response body: ${response.data}");
 
       return Attendance.fromJson(response.data["asistencia"]);
     } on DioException catch (e) {
+      debugPrint("[AttendanceService] ERROR: ${e.response?.statusCode}");
+      debugPrint("[AttendanceService] Response body: ${e.response?.data}");
       throw Exception(_extractMessage(e, "Error al registrar invitado"));
     }
   }
@@ -71,18 +84,27 @@ class AttendanceService {
       'Pasar usuarioId, o bien nombre y cedula (no ambos, no ninguno).',
     );
 
+    final String endpoint = "$_base/eventos/$eventId/asistencia-manual";
+    final data = userId != null
+        ? {"usuarioId": userId}
+        : {"nombre": name, "cedula": identification};
+
     try {
-      final data = userId != null
-          ? {"usuarioId": userId}
-          : {"nombre": name, "cedula": identification};
+      debugPrint("[AttendanceService] POST $endpoint");
+      debugPrint("[AttendanceService] Body: $data");
 
       final response = await _api.dio.post(
-        "$_base/eventos/$eventId/asistencia-manual",
+        endpoint,
         data: data,
       );
 
+      debugPrint("[AttendanceService] SUCCESS: ${response.statusCode}");
+      debugPrint("[AttendanceService] Response body: ${response.data}");
+
       return Attendance.fromJson(response.data["asistencia"]);
     } on DioException catch (e) {
+      debugPrint("[AttendanceService] ERROR: ${e.response?.statusCode}");
+      debugPrint("[AttendanceService] Response body: ${e.response?.data}");
       throw Exception(
         _extractMessage(e, "Error al registrar asistencia manual"),
       );
@@ -102,27 +124,52 @@ class AttendanceService {
   /// Registra asistencia a partir del payload de un QR
   Future<Attendance> registerAttendance(String qrData) async {
     try {
-      // Intentamos parsear el JSON del QR
-      final Map<String, dynamic> data = jsonDecode(qrData);
-      
-      if (data.containsKey('usuarioId') && data.containsKey('eventoId')) {
+      int? eventId;
+
+      // 1. Intento JSON: {"eventoId": 15}
+      try {
+        final jsonMap = jsonDecode(qrData);
+        if (jsonMap is Map && jsonMap['eventoId'] != null) {
+          eventId = int.tryParse(jsonMap['eventoId'].toString());
+        }
+      } catch (_) {}
+
+      // 2. Intento URL o Ruta: http://midominio.com/reunion/15 o undefined/reunion/15
+      if (eventId == null) {
+        final regexReunion = RegExp(r'/reunion/(\d+)');
+        final match = regexReunion.firstMatch(qrData);
+        if (match != null && match.groupCount >= 1) {
+          eventId = int.tryParse(match.group(1)!);
+        }
+      }
+
+      // 3. Intento Fallback local (Frontend): "evento-15"
+      if (eventId == null && qrData.startsWith('evento-')) {
+        eventId = int.tryParse(qrData.split('-').last);
+      }
+
+      // 4. Intento Numérico plano: "15"
+      if (eventId == null) {
+        eventId = int.tryParse(qrData);
+      }
+
+      // Validación final
+      if (eventId != null && eventId > 0) {
+        // Obtener el ID del usuario actual de la sesión
+        final userIdStr = SessionManager.currentUser?['id']?.toString() ?? '0';
+        final userId = int.tryParse(userIdStr) ?? 0;
+
         return await checkInQR(
-          userId: data['usuarioId'],
-          eventId: data['eventoId'],
+          userId: userId,
+          eventId: eventId,
         );
       }
-      
-      // Si el formato es distinto, enviar payload completo al endpoint
-      final response = await _api.dio.post(
-        "$_base/check-in-qr-payload",
-        data: {"payload": qrData},
-      );
-      return Attendance.fromJson(response.data["asistencia"]);
+      throw const FormatException("El código QR no contiene un ID de evento válido.");
     } catch (e) {
       if (e is DioException) {
         throw Exception(_extractMessage(e, "Error al registrar asistencia por QR"));
       }
-      throw Exception("Error procesando el QR: $e");
+      throw Exception("Formato de código QR no válido");
     }
   }
 }

@@ -7,6 +7,7 @@ class AppTextField extends StatelessWidget {
   final IconData? prefixIcon;
   final int maxLines;
   final TextInputType? keyboardType;
+  final String? Function(String?)? validator;
 
   const AppTextField({
     super.key,
@@ -16,16 +17,17 @@ class AppTextField extends StatelessWidget {
     this.prefixIcon,
     this.maxLines = 1,
     this.keyboardType,
+    this.validator,
   });
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return TextFormField(
       controller: controller,
       obscureText: obscureText,
       maxLines: maxLines,
       keyboardType: keyboardType,
-
+      validator: validator,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: prefixIcon == null ? null : Icon(prefixIcon),

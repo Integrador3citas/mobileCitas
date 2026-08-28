@@ -27,13 +27,10 @@ class _HomeScreenState extends State<HomeScreen> {
     _cargarPermisos();
   }
 
-  Future<void> _cargarPermisos() async {
-    // 'Usuarios' (GET /usuarios) es soloAdmin.
-    final isAdmin = await SessionManager.isAdmin();
-    // 'Asistencia' (check-in/reporte) es soloOperador o soloAdmin.
-    final puedeGestionar = await SessionManager.puedeGestionarEventos();
-
-    if (!mounted) return;
+  void _cargarPermisos() {
+    // Lectura síncrona directamente desde el caché en memoria
+    final isAdmin = SessionManager.isAdmin;
+    final puedeGestionar = SessionManager.puedeGestionarEventos;
 
     setState(() {
       _visibleIndices = {

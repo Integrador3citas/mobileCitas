@@ -24,7 +24,7 @@ class ParticipantService {
   }) async {
     try {
       final response = await _api.dio.post(
-        "/eventos/$eventoId/participantes",
+        "/api/eventos/$eventoId/participantes",
         data: {"usuarioId": usuarioId},
       );
 
@@ -39,7 +39,7 @@ class ParticipantService {
   /// puede verlos (solo verificarToken, sin restricción de rol).
   Future<List<Participant>> listarParticipantes(int eventoId) async {
     try {
-      final response = await _api.dio.get("/eventos/$eventoId/participantes");
+      final response = await _api.dio.get("/api/eventos/$eventoId/participantes");
       final data = response.data;
 
       final List<dynamic> raw =

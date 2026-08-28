@@ -85,6 +85,7 @@ class Meeting {
         "${date.day.toString().padLeft(2, '0')}";
 
     return {
+      'id': id,
       'nombre': title,
       'fecha': fechaStr,
       'hora': time,

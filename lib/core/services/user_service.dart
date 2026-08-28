@@ -25,7 +25,7 @@ class UserService {
   /// GET /usuarios -> { usuarios: [...] }
   Future<List<User>> listarUsuarios() async {
     try {
-      final response = await _api.dio.get("/usuarios");
+      final response = await _api.dio.get("/api/usuarios");
       final data = response.data;
 
       final List<dynamic> raw =
@@ -47,7 +47,7 @@ class UserService {
   }) async {
     try {
       final response = await _api.dio.post(
-        "/usuarios",
+        "/api/usuarios",
         data: {
           "nombre": nombre,
           "cedula": cedula,
@@ -73,7 +73,7 @@ class UserService {
   }) async {
     try {
       final response = await _api.dio.put(
-        "/usuarios/$id",
+        "/api/usuarios/$id",
         data: {
           "nombre": nombre,
           "cedula": cedula,
@@ -91,7 +91,7 @@ class UserService {
   /// DELETE /usuarios/:id
   Future<void> eliminarUsuario(int id) async {
     try {
-      await _api.dio.delete("/usuarios/$id");
+      await _api.dio.delete("/api/usuarios/$id");
     } on DioException catch (e) {
       throw Exception(_extractMensaje(e, "Error al eliminar usuario"));
     }

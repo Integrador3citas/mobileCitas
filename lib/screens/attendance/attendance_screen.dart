@@ -38,17 +38,27 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     });
 
     try {
-      final results = await Future.wait([
-        _meetingService.getMeetings(),
-        SessionManager.isAdmin(),
-      ]);
+      final meetings = await _meetingService.getMeetings();
+      final adminStatus = SessionManager.isAdmin;
 
+      final now = DateTime.now();
+
+      final futuras = meetings.where((m) => !m.dateTime.isBefore(now)).toList();
+      final pasadas = meetings.where((m) => m.dateTime.isBefore(now)).toList();
+
+      futuras.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      pasadas.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+
+      final sortedMeetings = [...futuras, ...pasadas];
+
+      if (!mounted) return;
       setState(() {
-        _meetings = results[0] as List<Meeting>;
-        _isAdmin = results[1] as bool;
+        _meetings = sortedMeetings;
+        _isAdmin = adminStatus;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString().replaceFirst("Exception: ", "");
         _isLoading = false;

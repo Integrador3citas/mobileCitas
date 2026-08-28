@@ -30,6 +30,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   bool _isLoading = true;
   bool _sinPermiso = false;
   String? _errorMessage;
+  String _selectedFilter = 'Todos';
 
   @override
   void initState() {
@@ -44,7 +45,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
       _sinPermiso = false;
     });
 
-    final esAdmin = await SessionManager.isAdmin();
+    final esAdmin = SessionManager.isAdmin;
     if (!esAdmin) {
       setState(() {
         _sinPermiso = true;
@@ -55,11 +56,13 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
 
     try {
       final report = await _attendanceService.report(widget.meetingId);
+      if (!mounted) return;
       setState(() {
         _report = report;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString().replaceFirst("Exception: ", "");
         _isLoading = false;
@@ -118,6 +121,15 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
 
   Widget _buildReport() {
     final report = _report!;
+    
+    List<AttendanceReportItem> filteredList = report.detail;
+    if (_selectedFilter == 'Presentes') {
+      filteredList = report.detail.where((item) => item.status == AttendanceStatus.present).toList();
+    } else if (_selectedFilter == 'Tardíos') {
+      filteredList = report.detail.where((item) => item.status == AttendanceStatus.late).toList();
+    } else if (_selectedFilter == 'Ausentes') {
+      filteredList = report.detail.where((item) => item.status == AttendanceStatus.absent).toList();
+    }
 
     return RefreshIndicator(
       onRefresh: _cargar,
@@ -150,28 +162,73 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
 
           const SizedBox(height: AppSpacing.xl),
 
-          Text("Detalle", style: AppTextStyles.heading),
+          Text("Detalle de Asistencia", style: AppTextStyles.heading),
 
           const SizedBox(height: AppSpacing.sm),
 
-          ...report.detail.map((item) {
-            return Card(
-              margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: ListTile(
-                title: Text(item.name),
-                subtitle: Text("${item.identification} · ${item.email}"),
-                trailing: Text(
-                  _statusLabel(item.status),
-                  style: AppTextStyles.body.copyWith(
-                    color: _statusColor(item.status),
-                    fontWeight: FontWeight.bold,
-                  ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip('Todos', report.total),
+                const SizedBox(width: AppSpacing.sm),
+                _buildFilterChip('Presentes', report.present),
+                const SizedBox(width: AppSpacing.sm),
+                _buildFilterChip('Tardíos', report.late),
+                const SizedBox(width: AppSpacing.sm),
+                _buildFilterChip('Ausentes', report.absent),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: AppSpacing.md),
+
+          if (filteredList.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+              child: Center(
+                child: Text(
+                  _selectedFilter == 'Todos'
+                      ? "No hay participantes registrados en esta reunión."
+                      : "No hay registros de tipo '${_selectedFilter.toLowerCase()}' en esta reunión.",
+                  style: AppTextStyles.body.copyWith(color: Colors.grey),
+                  textAlign: TextAlign.center,
                 ),
               ),
-            );
-          }),
+            )
+          else
+            ...filteredList.map((item) {
+              return Card(
+                margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: ListTile(
+                  title: Text(item.name),
+                  subtitle: Text("${item.identification} · ${item.email}"),
+                  trailing: Text(
+                    _statusLabel(item.status),
+                    style: AppTextStyles.body.copyWith(
+                      color: _statusColor(item.status),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              );
+            }),
         ],
       ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, int count) {
+    return FilterChip(
+      label: Text("$label ($count)"),
+      selected: _selectedFilter == label,
+      onSelected: (bool selected) {
+        if (selected) {
+          setState(() {
+            _selectedFilter = label;
+          });
+        }
+      },
     );
   }
 

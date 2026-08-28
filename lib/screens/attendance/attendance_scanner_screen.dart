@@ -40,6 +40,8 @@ class _AttendanceScannerScreenState extends State<AttendanceScannerScreen> {
     final String? qrData = barcodes.first.rawValue;
     if (qrData == null) return;
 
+    debugPrint("QR capturado RAW: $qrData");
+
     setState(() {
       _isProcessing = true;
     });
@@ -97,27 +99,29 @@ class _AttendanceScannerScreenState extends State<AttendanceScannerScreen> {
         title: const Text('Escanear QR de Asistencia'),
         actions: [
           IconButton(
-            icon: ValueListenableBuilder(
-              valueListenable: _scannerController.torchState,
+            icon: ValueListenableBuilder<MobileScannerState>(
+              valueListenable: _scannerController,
               builder: (context, state, child) {
-                switch (state) {
-                  case TorchState.off:
-                    return const Icon(Icons.flash_off, color: Colors.grey);
+                switch (state.torchState) {
                   case TorchState.on:
                     return const Icon(Icons.flash_on, color: Colors.yellow);
+                  case TorchState.off:
+                  default:
+                    return const Icon(Icons.flash_off, color: Colors.grey);
                 }
               },
             ),
             onPressed: () => _scannerController.toggleTorch(),
           ),
           IconButton(
-            icon: ValueListenableBuilder(
-              valueListenable: _scannerController.cameraFacingState,
+            icon: ValueListenableBuilder<MobileScannerState>(
+              valueListenable: _scannerController,
               builder: (context, state, child) {
-                switch (state) {
+                switch (state.cameraDirection) {
                   case CameraFacing.front:
                     return const Icon(Icons.camera_front);
                   case CameraFacing.back:
+                  default:
                     return const Icon(Icons.camera_rear);
                 }
               },

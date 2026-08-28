@@ -31,6 +31,7 @@ class _MeetingDetailsDialogState extends State<MeetingDetailsDialog> {
   int? _totalParticipantes;
   bool _isLoadingCount = true;
   bool _puedeGestionar = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -39,19 +40,29 @@ class _MeetingDetailsDialogState extends State<MeetingDetailsDialog> {
   }
 
   Future<void> _cargar() async {
-    setState(() => _isLoadingCount = true);
-
-    final results = await Future.wait([
-      _participantService.listarParticipantes(widget.meeting.id),
-      SessionManager.puedeGestionarEventos(),
-    ]);
-
-    if (!mounted) return;
     setState(() {
-      _totalParticipantes = (results[0] as List).length;
-      _puedeGestionar = results[1] as bool;
-      _isLoadingCount = false;
+      _isLoadingCount = true;
+      _errorMessage = null;
     });
+
+    try {
+      final participantes =
+          await _participantService.listarParticipantes(widget.meeting.id);
+      final puedeGestionar = SessionManager.puedeGestionarEventos;
+
+      if (!mounted) return;
+      setState(() {
+        _totalParticipantes = participantes.length;
+        _puedeGestionar = puedeGestionar;
+        _isLoadingCount = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingCount = false;
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   Future<void> _irAParticipantes() async {
@@ -81,72 +92,91 @@ class _MeetingDetailsDialogState extends State<MeetingDetailsDialog> {
   Widget build(BuildContext context) {
     final meeting = widget.meeting;
 
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Dialog(
-      child: SizedBox(
-        width: 700,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      meeting.title,
-                      style: AppTextStyles.pageTitle,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 700),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        meeting.title,
+                        style: AppTextStyles.pageTitle,
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: AppSpacing.md),
-
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _MeetingInformation(
-                      meeting: meeting,
+                    IconButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      icon: const Icon(Icons.close),
                     ),
-                  ),
+                  ],
+                ),
 
-                  const SizedBox(width: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.md),
 
-                  _MeetingQrCode(meeting: meeting),
-                ],
-              ),
-
-              const SizedBox(height: AppSpacing.lg),
-
-              const Divider(),
-
-              const SizedBox(height: AppSpacing.md),
-
-              Row(
-                children: [
-                  Text(
-                    "Participantes",
-                    style: AppTextStyles.heading,
-                  ),
-
-                  const Spacer(),
-
-                  Text(
-                    _isLoadingCount
-                        ? "cargando..."
-                        : "${_totalParticipantes ?? 0} participantes",
-                    style: AppTextStyles.body,
+                if (isMobile) ...[
+                  // En móvil, el QR arriba y la información abajo
+                  Center(child: _MeetingQrCode(meeting: meeting)),
+                  const SizedBox(height: AppSpacing.lg),
+                  _MeetingInformation(meeting: meeting),
+                ] else ...[
+                  // En escritorio, usamos Row
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _MeetingInformation(
+                          meeting: meeting,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.lg),
+                      _MeetingQrCode(meeting: meeting),
+                    ],
                   ),
                 ],
-              ),
+
+                const SizedBox(height: AppSpacing.lg),
+
+                const Divider(),
+
+                const SizedBox(height: AppSpacing.md),
+
+                Row(
+                  children: [
+                    Text(
+                      "Participantes",
+                      style: AppTextStyles.heading,
+                    ),
+
+                    const Spacer(),
+
+                    if (_isLoadingCount)
+                      Text("cargando...", style: AppTextStyles.body)
+                    else if (_errorMessage != null)
+                      Flexible(
+                        child: Text(
+                          _errorMessage!,
+                          style: AppTextStyles.body.copyWith(color: Colors.red),
+                          textAlign: TextAlign.end,
+                        ),
+                      )
+                    else
+                      Text(
+                        "${_totalParticipantes ?? 0} participantes",
+                        style: AppTextStyles.body,
+                      ),
+                  ],
+                ),
 
               const SizedBox(height: AppSpacing.md),
 
@@ -160,7 +190,7 @@ class _MeetingDetailsDialogState extends State<MeetingDetailsDialog> {
                     ),
                   ),
 
-                  const SizedBox(width: AppSpacing.md),
+                  const SizedBox(width: 8),
 
                   Expanded(
                     child: ElevatedButton.icon(
@@ -186,6 +216,7 @@ class _MeetingDetailsDialogState extends State<MeetingDetailsDialog> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

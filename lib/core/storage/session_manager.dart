@@ -8,51 +8,64 @@ class SessionManager {
   static const String _tokenKey = "jwt_token";
   static const String _usuarioKey = "usuario_actual";
 
-  static Future<void> saveToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
+  static late SharedPreferences _prefs;
+  
+  // Caché en memoria para acceso síncrono
+  static String? _token;
+  static Map<String, dynamic>? _usuario;
+
+  /// Inicializa las preferencias y carga la sesión en memoria.
+  /// Debe llamarse una sola vez en main.dart antes de runApp.
+  static Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+    _token = _prefs.getString(_tokenKey);
+    final raw = _prefs.getString(_usuarioKey);
+    if (raw != null) {
+      _usuario = jsonDecode(raw) as Map<String, dynamic>;
+    }
   }
 
-  static Future<String?> getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_tokenKey);
+  /// Guarda la sesión tanto en SharedPreferences como en la caché en memoria.
+  static Future<void> saveSession({
+    required String token, 
+    required Map<String, dynamic> usuario
+  }) async {
+    _token = token;
+    _usuario = usuario;
+    
+    await _prefs.setString(_tokenKey, token);
+    await _prefs.setString(_usuarioKey, jsonEncode(usuario));
   }
 
-  static Future<void> saveUsuario(Map<String, dynamic> usuario) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_usuarioKey, jsonEncode(usuario));
-  }
-
-  static Future<Map<String, dynamic>?> getUsuario() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_usuarioKey);
-    if (raw == null) return null;
-    return jsonDecode(raw) as Map<String, dynamic>;
-  }
-
-  static Future<String?> getRol() async {
-    final usuario = await getUsuario();
-    return usuario?['rol']?.toString();
-  }
-
-  static Future<bool> isAdmin() async {
-    final rol = await getRol();
-    return rol == 'Administrador';
-  }
-
-  static Future<bool> puedeGestionarEventos() async {
-    final rol = await getRol();
-    return rol == 'Administrador' || rol == 'Operador';
-  }
-
+  /// Limpia la sesión actual de SharedPreferences y de la memoria.
   static Future<void> clearSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_usuarioKey);
+    _token = null;
+    _usuario = null;
+    await _prefs.remove(_tokenKey);
+    await _prefs.remove(_usuarioKey);
   }
 
-  static Future<bool> hasSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.containsKey(_tokenKey);
+  // ==========================================
+  // GETTERS SÍNCRONOS
+  // ==========================================
+
+  /// Verifica si existe un token en memoria.
+  static bool get isAuthenticated => _token != null && _token!.isNotEmpty;
+
+  /// Retorna el token JWT actual.
+  static String? get token => _token;
+
+  /// Retorna los datos del usuario actual.
+  static Map<String, dynamic>? get currentUser => _usuario;
+
+  /// Retorna el rol del usuario actual.
+  static String? get userRole => _usuario?['rol']?.toString();
+
+  /// Retorna true si el usuario actual es Administrador.
+  static bool get isAdmin => userRole == 'Administrador';
+
+  /// Retorna true si el usuario actual tiene permisos para gestionar eventos (Admin u Operador).
+  static bool get puedeGestionarEventos {
+    return userRole == 'Administrador' || userRole == 'Operador';
   }
 }
